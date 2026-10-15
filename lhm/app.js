@@ -56,28 +56,54 @@ const _mx = new THREE.Matrix4();
 // pipe run through points (d inches). Elbows = curved tubes; DI gets flanged joints; PVC/threaded get socket collars.
 function run(pts, d, mat, info, g = G.piping, o = {}) {
   const P = pts.map(v3), r = rOD(d), grp = new THREE.Group(); g.add(grp); const gk = keyOf(g);
-  const fl = o.fl ?? (mat === MAT.di && d >= 2), ef = o.ef ?? !!fl, col = o.col ?? ((mat === MAT.pvc || mat === MAT.gpvc || mat === MAT.galv) && d < 9 && !fl);
-  const sg = d >= 4 ? 20 : d >= 2 ? 14 : 10, R0 = o.R ?? (fl ? r * 2.1 : col ? r * 2.4 : r * 2);
+  const mj = !!o.mj, fl = o.fl ?? (mat === MAT.di && d >= 2), ef = o.ef ?? !!fl, col = !mj && (o.col ?? ((mat === MAT.pvc || mat === MAT.gpvc || mat === MAT.galv) && d < 9 && !fl));
+  const sg = d >= 4 ? 20 : d >= 2 ? 14 : 10, R0 = mj ? r * 1.5 : o.R ?? (fl ? r * 2.1 : col ? r * 2.4 : r * 2), em = mj ? MAT.black : mat;
   const tr = P.map(() => 0), dirs = []; for (let i = 0; i < P.length - 1; i++) dirs.push(P[i + 1].clone().sub(P[i]).normalize());
   for (let i = 1; i < P.length - 1; i++) { if (dirs[i - 1].dot(dirs[i]) > .999) continue; tr[i] = Math.min(R0, P[i].distanceTo(P[i - 1]) * .45, P[i].distanceTo(P[i + 1]) * .45); }
   const collar = (p, dir) => { const m = lm(grp, ucyl(r * 1.17, sg), mat, p, dir); m.scale.y = r * 1.5; };
-  for (let i = 0; i < P.length - 1; i++) seg(P[i].clone().addScaledVector(dirs[i], tr[i]), P[i + 1].clone().addScaledVector(dirs[i], -tr[i + 1]), r, mat, grp, sg);
+  for (let i = 0; i < P.length - 1; i++) { const a = P[i].clone().addScaledVector(dirs[i], tr[i]), b = P[i + 1].clone().addScaledVector(dirs[i], -tr[i + 1]); seg(a, b, r, mat, grp, sg);
+    if (mj) { const L = a.distanceTo(b); for (let k = 18; k < L - 3; k += 18) pbell(grp, a.clone().addScaledVector(dirs[i], k), dirs[i], d); } }
   for (let i = 1; i < P.length - 1; i++) { if (!tr[i]) continue; const a = dirs[i - 1], b = dirs[i], R = tr[i], c = P[i];
-    let m; if (Math.abs(a.dot(b)) < 1e-3) { m = new THREE.Mesh(gc(`el${r.toFixed(4)},${R.toFixed(3)},${sg}`, () => new THREE.TubeGeometry(new Arc(R), 10, r, sg)), mat); m.quaternion.setFromRotationMatrix(_mx.makeBasis(a, b, a.clone().cross(b))); m.position.copy(c); }
-    else m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(c.clone().addScaledVector(a, -R), c, c.clone().addScaledVector(b, R)), 8, r, sg), mat);
+    let m; if (Math.abs(a.dot(b)) < 1e-3) { m = new THREE.Mesh(gc(`el${r.toFixed(4)},${R.toFixed(3)},${sg}`, () => new THREE.TubeGeometry(new Arc(R), 10, r, sg)), em); m.quaternion.setFromRotationMatrix(_mx.makeBasis(a, b, a.clone().cross(b))); m.position.copy(c); }
+    else m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(c.clone().addScaledVector(a, -R), c, c.clone().addScaledVector(b, R)), 8, r, sg), em);
     grp.add(m); const e0 = c.clone().addScaledVector(a, -R), e1 = c.clone().addScaledVector(b, R);
-    if (ef) { flange(grp, IDM, e0, a, d, mat, gk, true); flange(grp, IDM, e1, b, d, mat, gk, true); } else if (col) { collar(e0, a); collar(e1, b); } }
+    if (mj) { mjEnd(grp, e0, a.clone().negate(), d, gk); mjEnd(grp, e1, b, d, gk); }
+    else if (ef) { flange(grp, IDM, e0, a, d, mat, gk, true); flange(grp, IDM, e1, b, d, mat, gk, true); } else if (col) { collar(e0, a); collar(e1, b); } }
   const n = P.length - 1, F = FL[d], ft = F ? F[1] / 12 : 0;
   if (fl === true || fl === 'a') flange(grp, IDM, P[0].clone().addScaledVector(dirs[0], ft / 2), dirs[0], d, mat, gk);
   if (fl === true || fl === 'b') flange(grp, IDM, P[n].clone().addScaledVector(dirs[n - 1], -ft / 2), dirs[n - 1], d, mat, gk);
   if (o.blind) for (const [p, dr] of o.blind === 'b' ? [[P[n], dirs[n - 1]]] : [[P[0], dirs[0].clone().negate()], [P[n], dirs[n - 1]]]) lm(grp, gc('bf' + d, () => new THREE.CylinderGeometry(F[0] / 24, F[0] / 24, ft, 28)), mat, p.clone().addScaledVector(dr, ft * 1.5), dr);
   if (info) tag(grp, ...info); return grp;
 }
-const U = (...a) => run(a[0], a[1], MAT.pvc, a[2], G.piping, { R: rOD(a[1]) * 3 }); // buried white PVC
-// tee branch stub off a header (collar on header + stub)
-function tee(p, hdrDir, dir, d, len, mat, g = G.piping) { p = v3(p); const r = rOD(d), grp = new THREE.Group(); g.add(grp);
-  const c = lm(grp, ucyl(r * 1.1, 20), mat, p, hdrDir); c.scale.y = r * 2.6; seg(p, p.clone().addScaledVector(dir, len), r * 1.02, mat, grp, 20);
-  lm(grp, gc('tb' + d, () => new THREE.SphereGeometry(r * 1.1, 16, 10)), mat, p); flange(grp, IDM, p.clone().addScaledVector(dir, len - FL[d][1] / 24), dir, d, mat, keyOf(g)); return grp; }
+// buried white PVC (>1": push-on bells + black DI MJ fittings w/ restraint glands; <=1": solvent-weld)
+const U = (...a) => run(a[0], a[1], MAT.pvc, a[2], G.piping, a[1] > 1 ? { mj: true } : { R: rOD(a[1]) * 3 });
+// PVC push-on bell
+function pbell(g, p, dir, d) { const r = rOD(d); lm(g, gc('pb' + d, () => new THREE.CylinderGeometry(r * 1.2, r * 1.2, r * 1.4, 20)), MAT.pvc, p, dir);
+  lm(g, gc('pbt' + d, () => new THREE.CylinderGeometry(r * 1.2, r, r * .4, 20)), MAT.pvc, p.clone().addScaledVector(dir, r * .9), dir); }
+// MJ bell end on a DI fitting: e = fitting end, out = direction toward the pipe. bell + MJ gland (T-bolts) + wedge restraint gland (actuating screws)
+function mjEnd(g, e, out, d, gk) { const r = rOD(d), o = out.clone().normalize(), nb = d >= 6 ? 6 : 4, [u, v] = perp(o);
+  lm(g, gc('mjb' + d, () => new THREE.CylinderGeometry(r * 1.42, r * 1.32, r * 1.1, 22)), MAT.black, e.clone().addScaledVector(o, r * .55), o);
+  const gp = e.clone().addScaledVector(o, r * 1.18); lm(g, gc('mjg' + d, () => new THREE.CylinderGeometry(r * 1.78, r * 1.78, r * .2, 6 * nb)), MAT.black, gp, o);
+  bolts(gk, IDM, gp, o, r * 1.6, nb, r * .2 + r * .5, Math.max(.05, r * .16));
+  const wp = e.clone().addScaledVector(o, r * 1.62); lm(g, gc('mjw' + d, () => new THREE.CylinderGeometry(r * 1.42, r * 1.48, r * .5, 22)), MAT.black, wp, o);
+  for (let i = 0; i < nb; i++) { const a = i / nb * Math.PI * 2, rd = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+    lm(g, gc('mjs' + d, () => new THREE.CylinderGeometry(r * .1, r * .1, r * .4, 8)), MAT.black, wp.clone().addScaledVector(rd, r * 1.6), rd);
+    lm(g, gc('mjn' + d, () => new THREE.CylinderGeometry(r * .16, r * .16, r * .14, 6)), MAT.bolt, wp.clone().addScaledVector(rd, r * 1.85), rd); } }
+// buried MJ tee (black DI) – header through, branch dir; branch may be smaller (db)
+function mjTee(p, hdr, dir, d, db = d) { p = v3(p); const r = rOD(d), rb = rOD(db), hl = r * 2.4, bl = r * 2.2, grp = new THREE.Group(); G.piping.add(grp);
+  seg(p.clone().addScaledVector(hdr, -hl), p.clone().addScaledVector(hdr, hl), r * 1.08, MAT.black, grp, 20); seg(p, p.clone().addScaledVector(dir, bl), rb * 1.08, MAT.black, grp, 20);
+  lm(grp, gc('mjtb' + d, () => new THREE.SphereGeometry(r * 1.14, 16, 10)), MAT.black, p);
+  mjEnd(grp, p.clone().addScaledVector(hdr, -hl), hdr.clone().negate(), d, 'piping'); mjEnd(grp, p.clone().addScaledVector(hdr, hl), hdr, d, 'piping'); mjEnd(grp, p.clone().addScaledVector(dir, bl), dir, db, 'piping');
+  return tag(grp, `${d}"${db !== d ? 'x' + db + '"' : ''} MJ tee (buried)`, 'Black ductile-iron mechanical-joint tee, MJ glands w/ T-bolts + wedge restraint glands (Megalug-style) on each bell', 'Owner convention', 'No glued fittings on buried PVC >1"'); }
+function mjCap(p, out, d) { p = v3(p); const r = rOD(d), grp = new THREE.Group(); G.piping.add(grp); mjEnd(grp, p, out.clone().negate(), d, 'piping');
+  lm(grp, gc('mjc' + d, () => new THREE.CylinderGeometry(r * 1.3, r * 1.3, r * .5, 22)), MAT.black, p.clone().addScaledVector(out, r * .1), out); return tag(grp, `${d}" MJ plug (buried)`, 'DI MJ plug w/ restraint gland', 'ASSUMED'); }
+// flanged DI tee (flanges on all three ends). Returns center-to-face length.
+const TL = d => FL[d][0] / 24 + .12;
+function tee(p, hdrDir, dir, d, len, mat, g = G.piping) { p = v3(p); const r = rOD(d), grp = new THREE.Group(), hl = TL(d), ft = FL[d][1] / 12, gk = keyOf(g); g.add(grp); len = Math.max(len, hl);
+  seg(p.clone().addScaledVector(hdrDir, -hl), p.clone().addScaledVector(hdrDir, hl), r * 1.06, mat, grp, 20); seg(p, p.clone().addScaledVector(dir, len), r * 1.06, mat, grp, 20);
+  lm(grp, gc('tb' + d, () => new THREE.SphereGeometry(r * 1.12, 16, 10)), mat, p);
+  for (const [q, dd] of [[p.clone().addScaledVector(hdrDir, -hl + ft / 2), hdrDir], [p.clone().addScaledVector(hdrDir, hl - ft / 2), hdrDir], [p.clone().addScaledVector(dir, len - ft / 2), dir]]) flange(grp, IDM, q, dd, d, mat, gk);
+  return tag(grp, `${d}" flanged tee`, `${d}" 125# FL DI tee, flanged all three ends`, 'Sheet 6'); }
 // wall sleeve + seal ring
 function sleeve(p, dir, d, g = G.piping) { const r = rOD(d); lm(g, gc('sl' + d, () => new THREE.CylinderGeometry(r * 1.45, r * 1.45, .74, 20)), MAT.dark, v3(p), dir); }
 function reducer(a, b, r1, r2, ecc, mat, g = G.piping) { a = v3(a); b = v3(b); const L = a.distanceTo(b), dir = b.clone().sub(a).normalize();
@@ -95,15 +121,19 @@ function valve(p, ax, d, kind, info, g = G.piping, up, o = {}) {
     const bm = kind === 'check' ? MAT.blue : MAT.red;
     for (const s of [-1, 1]) flange(grp, fr, V(s * (L / 2 - ft / 2), 0, 0), X1, d, bm, gk);
     add(gc('vb' + d + L, () => new THREE.CylinderGeometry(r * 1.12, r * 1.12, L - ft * 1.5, 20)), bm, V(0, 0, 0), X1);
-    if (kind === 'gate') {
-      const ch = add(gc('gc' + d, () => new THREE.CylinderGeometry(r * 1.2, r * 1.45, r * 2.4, 20)), bm, V(0, r * .45, 0)); ch.scale.z = .72;
-      const yb = r * 1.7; add(gc('gbf' + d, () => new THREE.CylinderGeometry(r * 1.35, r * 1.35, .07, 22)), bm, V(0, yb, 0)); bolts(gk, fr, V(0, yb, 0), UP, r * 1.18, d >= 6 ? 10 : 6, .07, Math.min(.06, F ? F[4] / 12 : .05));
-      if (o.buried) { add(gc('gbn' + d, () => new THREE.CylinderGeometry(r * .5, r * .9, r * 1.4, 16)), bm, V(0, yb + r * .7, 0)); const top = Y0 - grp.position.y; const vb = add(ucyl(.28, 16), MAT.dark, V(0, (yb + r * 1.4 + top) / 2, 0)); vb.scale.y = top - yb - r * 1.4; add(gc('vbl', () => new THREE.CylinderGeometry(.36, .36, .06, 20)), MAT.dark, V(0, top + .03, 0)); }
-      else { const bh = r * 2.2 + .15; add(gc('gbn' + d, () => new THREE.CylinderGeometry(r * .55, r * .95, bh, 18)), bm, V(0, yb + bh / 2, 0));
-        const y1 = yb + bh, yh = r * 2.4 + .35; for (const s of [-1, 1]) add(gc('yk' + d, () => new THREE.BoxGeometry(.06, yh, .1)), bm, V(s * r * .5, y1 + yh / 2, 0)); add(gc('ykt' + d, () => new THREE.BoxGeometry(r + .16, .1, .14)), bm, V(0, y1 + yh, 0));
-        const st = add(ucyl(.022, 8), MAT.ss, V(0, y1 + yh * .55, 0)); st.scale.y = yh * 1.3; const hr = Math.max(.24, r * 1.55), hy = y1 + yh + .1;
-        const hw = add(gc('hw' + hr, () => new THREE.TorusGeometry(hr, .035, 8, 32)), MAT.black, V(0, hy, 0)); hw.rotation.x = Math.PI / 2;
-        add(gc('hub', () => new THREE.CylinderGeometry(.06, .06, .08, 12)), MAT.black, V(0, hy, 0)); for (let i = 0; i < 5; i++) { const sp = add(gc('sp' + hr, () => new THREE.BoxGeometry(hr, .035, .035)), MAT.black, V(Math.cos(i * 1.2566) * hr / 2, hy, Math.sin(i * 1.2566) * hr / 2)); sp.rotation.y = -i * 1.2566; } }
+    if (kind === 'gate') { // compact resilient-wedge, non-rising stem: short rounded bolted bonnet, handwheel right on bonnet
+      const fr0 = F ? F[0] / 24 : r * 1.6, bt = Math.max(.04, r * .14);
+      add(gc('gcb' + d, () => new THREE.SphereGeometry(r * 1.32, 22, 14)), bm, V(0, 0, 0)).scale.set(Math.min(1, (L - ft * 2) / (r * 2.64)), 1, .9);
+      const ch = add(gc('gc' + d, () => new THREE.CylinderGeometry(r * 1.05, r * 1.25, r * .9, 22)), bm, V(0, r * .7, 0)); ch.scale.z = .78;
+      const yb = r * 1.15; const bf = add(gc('gbf' + d, () => new THREE.CylinderGeometry(r * 1.3, r * 1.3, bt, 24)), bm, V(0, yb, 0)); bf.scale.z = .8;
+      bolts(gk, fr, V(0, yb, 0), UP, r * 1.12, d >= 6 ? 8 : 6, bt, Math.min(.055, F ? F[4] / 12 * .8 : .04));
+      const bon = add(gc('gbn' + d, () => new THREE.SphereGeometry(r * 1.12, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2)), bm, V(0, yb + bt / 2, 0)); bon.scale.set(1, .62, .8);
+      const ytop = yb + bt / 2 + r * 1.12 * .62;
+      if (o.buried) { add(gc('gon', () => new THREE.BoxGeometry(.17, .14, .17)), MAT.dark, V(0, ytop + .07, 0)); const top = Y0 - grp.position.y; const vb = add(ucyl(.28, 16), MAT.dark, V(0, (ytop + .3 + top) / 2, 0)); vb.scale.y = top - ytop - .3; add(gc('vbl', () => new THREE.CylinderGeometry(.36, .36, .06, 20)), MAT.dark, V(0, top + .03, 0)); }
+      else { const hr = Math.max(.2, fr0 * .95), hy = ytop + .08; add(ucyl(.03, 10), MAT.ss, V(0, hy, 0)).scale.y = .2; // stem barely protrudes
+        const hw = add(gc('hw' + hr, () => new THREE.TorusGeometry(hr, Math.max(.025, hr * .07), 10, 40)), MAT.black, V(0, hy, 0)); hw.rotation.x = Math.PI / 2;
+        add(gc('hub' + hr, () => new THREE.CylinderGeometry(hr * .2, hr * .22, .07, 16)), MAT.black, V(0, hy, 0)); add(gc('hnut', () => new THREE.CylinderGeometry(.04, .04, .04, 6)), MAT.ss, V(0, hy + .05, 0));
+        for (let i = 0; i < 5; i++) { const a = i * 1.2566, sp = add(gc('sp' + hr, () => new THREE.BoxGeometry(hr * .82, Math.max(.025, hr * .07), Math.max(.03, hr * .1))), MAT.black, V(Math.cos(a) * hr * .55, hy, Math.sin(a) * hr * .55)); sp.rotation.y = -a; } }
     } else { // swing/silent check: swelled body + bolted cover
       add(gc('cb' + d, () => new THREE.SphereGeometry(r * 1.4, 20, 14)), bm, V(0, r * .15, 0)).scale.set(L / (r * 3.2), 1, .85);
       const yc = r * 1.35; add(gc('cc' + d, () => new THREE.CylinderGeometry(r * 1.05, r * 1.05, .08, 22)), bm, V(0, yc, 0)); bolts(gk, fr, V(0, yc, 0), UP, r * .9, d >= 6 ? 8 : 6, .08, Math.min(.06, F ? F[4] / 12 : .05));
@@ -122,7 +152,7 @@ function stand(x, z, ytop, r, axis = 'x', y0 = 0, g = G.piping) { const grp = ne
   const sd = lm(grp, gc('sd' + r, () => new THREE.CylinderGeometry(r * 1.04, r * 1.04, .3, 18, 1, true, Math.PI / 2, Math.PI)), MAT.galvD, V(x, ytop, z)); { const yw = axis === 'x' ? X1 : Z1; sd.quaternion.setFromRotationMatrix(_mx.makeBasis(yw.clone().cross(UP), yw, UP)); }
   box(.36, .06, .36, MAT.galv, x, ytop - r - .07, z, grp);
   return tag(grp, 'Adjustable pipe support', 'Galvanized adjustable pipe saddle stand w/ base plate', 'Sheet 6', 'Galvanized per owner convention'); }
-// ---------- END-SUCTION PUMP ----------
+// ---------- CLOSE-COUPLED END-SUCTION PUMP ----------
 const voluteGeo = () => gc('volute', () => { const N = 56, Mx = 14, pos = [], idx = [];
   for (let i = 0; i <= N; i++) { const t = i / N, th = -2 * Math.PI + 2 * Math.PI * t, rc = .09 + .17 * t, Rc = .40 + rc, c = V(Rc * Math.cos(th), Rc * Math.sin(th), 0), rad = V(Math.cos(th), Math.sin(th), 0);
     for (let j = 0; j <= Mx; j++) { const f = j / Mx * Math.PI * 2; const p = c.clone().addScaledVector(rad, rc * Math.cos(f)).addScaledVector(Z1, rc * 1.05 * Math.sin(f)); pos.push(p.x, p.y, p.z); } }
@@ -138,28 +168,23 @@ function pump(x, mk, P0) { const g = new THREE.Group(); G.equip.add(g); const PZ
   for (const s of [-1, 1]) for (const zz of [-1.9, 0, 1.9]) lm(g, gc('abn', () => new THREE.CylinderGeometry(.05, .05, .07, 6)), MAT.bolt, V(x + s * .7, 1.74, PZ + zz));
   const cas = new THREE.Group(); g.add(cas); tag(cas, `Pump ${mk} – volute casing`, S.pumps.type, 'Sheet 6 pump schedule', '4" end-suction nozzle, top discharge');
   lm(cas, voluteGeo(), MAT.pump, V(x, ys, zc)); lm(cas, latheZ('vcore', [[0, -.24], [.5, -.24], [.56, -.15], [.56, .15], [.5, .26], [0, .26]], 32), MAT.pump, V(x, ys, zc));
-  lm(cas, latheZ('vadp', [[.52, 0], [.46, .12], [.28, .3], [.22, .45]], 24), MAT.pump, V(x, ys, zc + .22));
   lm(cas, latheZ('sucn', [[.27, 0], [.22, .1], [.2, .45]], 22), MAT.pump, V(x, ys, zc - .22)).rotation.y = Math.PI; flange(cas, IDM, V(x, ys, zc - .7 + .04), Z1, 4, MAT.pump, gk);
   lm(cas, gc('dn', () => new THREE.CylinderGeometry(.2, .26, .95, 20)), MAT.pump, V(x + .66, ys + .47, zc)); flange(cas, IDM, V(x + .66, ys + .95 - .04, zc), UP, 4, MAT.pump, gk);
   box(.5, ys - .92 - 1.7 + .12, .3, MAT.pump, x, (ys - .92 + 1.7) / 2 + .03, zc, cas);
-  // bearing frame
-  const bf = lm(g, latheZ('bfr', [[.24, 0], [.2, .08], [.2, .55], [.24, .65]], 22), MAT.pump, V(x, ys, zc + .45)); tag(bf, 'Bearing frame', 'Oil-lubricated power frame', 'Typical');
-  box(.55, ys - .2 - 1.7, .5, MAT.pump, x, (ys - .2 + 1.7) / 2, zc + .8, g); lm(g, gc('oil', () => new THREE.CylinderGeometry(.05, .05, .04, 12)), MAT.glass, V(x + .21, ys - .05, zc + .8), X1);
-  // coupling guard (D-shape)
-  const gs = new THREE.Shape(); gs.moveTo(-.3, -.42); gs.lineTo(.3, -.42); gs.lineTo(.3, 0); gs.absarc(0, 0, .3, 0, Math.PI, false); gs.lineTo(-.3, -.42);
-  const cg = lm(g, gc('cg', () => new THREE.ExtrudeGeometry(gs, { depth: .52, bevelEnabled: true, bevelSize: .015, bevelThickness: .015, bevelSegments: 1, curveSegments: 12 })), MAT.guard, V(x, ys, zc + 1.1)); tag(cg, 'Coupling guard', 'OSHA coupling guard', 'Typical');
-  // TEFC motor
-  const mo = new THREE.Group(); g.add(mo); const mz0 = zc + 1.66, ml = 1.5;
-  lm(mo, latheZ('mde', [[0, 0], [.22, 0], [.3, .05], [.56, .14], [.58, .22]], 28), MAT.motor, V(x, ys, mz0));
+  // close-coupled: C-face motor adapter bolted to volute back, motor face bolted to adapter (no exposed shaft / frame / coupling)
+  const ad = lm(g, latheZ('cfa', [[.5, 0], [.5, .06], [.4, .1], [.36, .2], [.38, .3], [.5, .34], [.5, .38]], 28), MAT.pump, V(x, ys, zc + .22)); tag(ad, 'C-face motor adapter', 'Close-coupled pump: volute bolts to motor C-face', 'Owner convention');
+  bolts(gk, IDM, V(x, ys, zc + .25), Z1, .45, 8, .06, .05); bolts(gk, IDM, V(x, ys, zc + .57), Z1, .45, 8, .06, .05);
+  const mo = new THREE.Group(); g.add(mo); const mz0 = zc + .6, ml = 1.5;
+  lm(mo, latheZ('mde', [[0, 0], [.5, 0], [.52, .05], [.56, .14], [.58, .22]], 28), MAT.motor, V(x, ys, mz0));
   lm(mo, finGeo(.57, .625, 40, ml), MAT.motor, V(x, ys, mz0 + .22 + ml / 2));
   lm(mo, latheZ('mfe', [[.58, 0], [.56, .1], [.5, .14]], 28), MAT.motor, V(x, ys, mz0 + .22 + ml));
   lm(mo, latheZ('fcv', [[.6, 0], [.62, .04], [.62, .34], [.55, .42], [.2, .46], [0, .46]], 30), MAT.motor, V(x, ys, mz0 + .32 + ml));
   for (const rr of [.16, .3, .44]) lm(mo, gc('fg' + rr, () => new THREE.TorusGeometry(rr, .018, 6, 28)), MAT.dark, V(x, ys, mz0 + .32 + ml + .46));
   const cb = box(.32, .32, .4, MAT.motor, x + .72, ys + .12, mz0 + .7, mo); box(.04, .26, .3, MAT.motor, x + .9, ys + .12, mz0 + .7, mo);
-  seg(V(x + .78, ys - .05, mz0 + .7), V(x + .78, 1.75, mz0 + .7), .06, MAT.galv, mo, 10); box(.9, .5, 1.2, MAT.motor, x, 1.7 + (ys - .45 - 1.7) / 2, mz0 + .95, mo).scale.y = (ys - .45 - 1.7) / .5;
+  seg(V(x + .78, ys - .05, mz0 + .7), V(x + .78, 1.75, mz0 + .7), .06, MAT.galv, mo, 10); box(.9, .5, 1.3, MAT.motor, x, 1.7 + (ys - .45 - 1.7) / 2, mz0 + .95, mo).scale.y = (ys - .45 - 1.7) / .5;
   lm(mo, gc('leye', () => new THREE.TorusGeometry(.08, .025, 6, 14)), MAT.motor, V(x, ys + .7, mz0 + .9));
   box(.2, .12, .01, MAT.ss, x - .3, ys + .55, mz0 + .5, mo).rotation.x = -.6;
-  tag(mo, `Motor ${mk}`, '40 HP TEFC, cooling-fin frame, fan cover, conduit box', 'Sheet 6 pump schedule', 'Motor color per owner photos – ASSUMED');
+  tag(mo, `Motor ${mk}`, '40 HP TEFC C-face, close-coupled, cooling-fin frame, fan cover, conduit box', 'Sheet 6 pump schedule', 'Motor color per owner photos – ASSUMED');
   tag(g, `Pump ${mk}`, S.pumps.type, 'Sheet 6 pump schedule', mk === 'P103' ? 'P103 in schedule; E-sheets mostly show P101/P102 – may be future' : '2\'-0"x4\'-8"x18" pad'); return g; }
 MAT.galvD = MAT.galv.clone(); MAT.galvD.side = THREE.DoubleSide;
 function label(txt, x, y, z) { const e = document.createElement('div'); e.className = 'lbl'; e.textContent = txt; $('lbls').appendChild(e); LBL.push({ e, p: V(x, y, z) }); }
@@ -246,27 +271,27 @@ const GFACE = new THREE.MeshStandardMaterial({ map: canvasTex(64, 64, c => { c.f
   for (const [z, n] of [[-hz - .7, 'Motorized SS supply ventilator 200 CFM'], [hz + .7, 'Motorized SS exhaust ventilator 200 CFM']]) { const v = cyl(.9, 1.2, MAT.galv, g); v.rotation.x = Math.PI / 2; v.position.set(-11.5, 6.4, z); tag(v, n, '12" below clg height', 'Sheet 6'); }
 }
 // ---------- PUMPS & HEADERS ----------
-const P = S.piping, sh = P.suction_header, dh = P.discharge_header, R8 = rOD(8), R4 = rOD(4);
+const P = S.piping, sh = P.suction_header, dh = P.discharge_header; dh.y += .4; /* v3: raised so flanged tees clear gate valves */ const R8 = rOD(8), R4 = rOD(4);
 const P0 = { ys: 2.65, zc: -2.3 }; const SHY = P0.ys + R4 - R8; // eccentric reducer flat-on-top => header lower
 S.pumps.x.forEach((x, i) => { const mk = S.pumps.marks[i]; pump(x, mk, P0);
-  tee([x, SHY, sh.z], X1, Z1, 8, .45, MAT.di);
-  run([[x, SHY, sh.z + .45], [x, SHY, -3.8]], 8, MAT.di, ['Pump suction spool', '8" FL DI', 'Sheet 6'], G.piping, { fl: 'b' });
-  valve([x, SHY, sh.z + .45 + .48], 'z', 8, 'gate', [`Suction gate valve ${mk}`, '8" gate valve (F) – mark 102', 'Sheet 6']);
+  const tl = TL(8); tee([x, SHY, sh.z], X1, Z1, 8, tl, MAT.di);
+  run([[x, SHY, sh.z + tl], [x, SHY, -3.8]], 8, MAT.di, ['Pump suction spool', '8" FL DI', 'Sheet 6'], G.piping, { fl: 'b' });
+  valve([x, SHY, sh.z + tl + .48], 'z', 8, 'gate', [`Suction gate valve ${mk}`, '8" gate valve (F) – mark 102', 'Sheet 6']);
   const rd = reducer([x, SHY, -3.8], [x, SHY + R8 - R4, -3.0 - .04], R8, R4, true, MAT.di); tag(rd, '8"x4" eccentric reducer (104)', 'Flat on top, to 4" pump suction', 'Sheet 6');
   const X = x + .66; reducer([X, 3.6, -2.3], [X, 4.3, -2.3], R4, R8, false, MAT.di).userData.info = { name: 'Discharge increaser', size: '4"x8" concentric (112/115)', src: 'Sheet 6' };
   flange(G.piping, IDM, V(X, 4.3, -2.3), UP, 8, MAT.di, 'piping');
-  run([[X, 4.3, -2.3], [X, dh.y, -2.3]], 8, MAT.di, ['Discharge riser', '8" FL DI', 'Sheet 6'], G.piping, { fl: false });
+  tee([X, dh.y, -2.3], X1, UP.clone().negate(), 8, tl, MAT.di);
+  run([[X, 4.3, -2.3], [X, dh.y - tl, -2.3]], 8, MAT.di, ['Discharge riser', '8" FL DI', 'Sheet 6'], G.piping, { fl: false });
   valve([X, 4.3 + .39, -2.3], 'y', 8, 'check', [`Silent check valve ${mk}`, '8" silent check valve (F) – mark 103', 'Sheet 6', 'Blue per owner convention'], G.piping, Z1, { L: .78 });
   valve([X, 5.08 + .48, -2.3], 'y', 8, 'gate', [`Discharge gate valve ${mk}`, '8" gate valve (F) – mark 102', 'Sheet 6'], G.piping, Z1);
-  for (const yy of [dh.y - R8 * 1.3]) lm(G.piping, ucyl(R8 * 1.1, 20), MAT.di, V(X, dh.y, -2.3), X1).scale.y = R8 * 2.6;
 });
 run([[sh.x0, SHY, sh.z], [sh.x1, SHY, sh.z]], 8, MAT.di, ['Suction header', '8" FL DI (109), from GST', 'Sheet 6', 'Elevation set by eccentric reducers – ASSUMED (owner: suction low)'], G.piping, { blind: true });
 run([[dh.x0, dh.y, dh.z], [dh.x1, dh.y, dh.z]], 8, MAT.di, ['Pressure (discharge) header', '8" FL DI', 'Sheet 6', 'Elevation ASSUMED (owner: pressure above suction)'], G.piping, { blind: true });
 // GST suction in (north wall) and to distribution — DI risers outside drop into ground
-run([[P.gst_suction_in.x, Y0 - 1, -hz - .75], [P.gst_suction_in.x, SHY, -hz - .75], [P.gst_suction_in.x, SHY, sh.z]], 8, MAT.di, ['8" from G.S.T. (suction)', '8" wall sleeve (108) + FL DI; DI riser out of ground outside wall', 'Sheet 6']);
-lm(G.piping, ucyl(R8 * 1.1, 20), MAT.di, V(P.gst_suction_in.x, SHY, sh.z), Z1).scale.y = R8 * 2.6;
-tee([P.to_distribution.x, dh.y, dh.z], X1, Z1.clone().negate(), 8, .45, MAT.di);
-run([[P.to_distribution.x, dh.y, dh.z - .45], [P.to_distribution.x, dh.y, -9.4], [P.to_distribution.x, Y0 - 1, -9.4]], 8, MAT.di, ['8" to distribution / pressure tanks', '8" FL DI, 8" 90s (111/113), wall sleeve; DI riser down into ground', 'Sheets 6, 8'], G.piping, { fl: 'a' });
+run([[P.gst_suction_in.x, Y0 - 1, -hz - .75], [P.gst_suction_in.x, SHY, -hz - .75], [P.gst_suction_in.x, SHY, sh.z - TL(8)]], 8, MAT.di, ['8" from G.S.T. (suction)', '8" wall sleeve (108) + FL DI; DI riser out of ground outside wall', 'Sheet 6']);
+tee([P.gst_suction_in.x, SHY, sh.z], X1, Z1.clone().negate(), 8, TL(8), MAT.di);
+tee([P.to_distribution.x, dh.y, dh.z], X1, Z1.clone().negate(), 8, TL(8), MAT.di);
+run([[P.to_distribution.x, dh.y, dh.z - TL(8)], [P.to_distribution.x, dh.y, -9.4], [P.to_distribution.x, Y0 - 1, -9.4]], 8, MAT.di, ['8" to distribution / pressure tanks', '8" FL DI, 8" 90s (111/113), wall sleeve; DI riser down into ground', 'Sheets 6, 8'], G.piping, { fl: 'a' });
 for (const xx of [P.gst_suction_in.x]) sleeve([xx, SHY, -hz + t / 2], Z1, 8); sleeve([P.to_distribution.x, dh.y, -hz + t / 2], Z1, 8);
 for (const x of [-1.2, 5.6]) stand(x, sh.z, SHY, R8, 'x'); for (const x of [.6, 6.0]) stand(x, dh.z, dh.y, R8, 'x');
 for (const [x, z] of [[-4.2, 5.5], [1, -6.8], [12, 6.5]]) { const hb = run([[x, 3, z], [x + .35, 3, z]], .75, MAT.brass, null, G.piping, { col: false }); tag(hb, 'Hose bib', '3/4" brass hose bib', 'Sheet 6/7'); }
@@ -287,22 +312,22 @@ for (const [key, meter, nm] of [['well11', '4" Census Octave ultrasonic meter (1
 // ---------- PT AIR / LEVEL LINES, VISIPROBE, COMPRESSOR ----------
 const pts = S.pressure_tanks, PT = S.pt_dims, PCY = Y0 + 2.5 + PT.dia / 2; // PT centerline (saddles at grade)
 const XW = hx - t; // inner face east wall
-{ const [px, pz] = pts[0].center, top = PCY + PT.dia / 2, za = pz - 8, yA = 8.9, yB2 = 8.7, ex = { col: true };
+{ const [px, pz] = pts[0].center, top = PCY + PT.dia / 2, za = pz - 8, yA = 8.9, yB2 = 8.7, ex = { col: true }, yAi = H - 1, yBi = H - 1.25, xA = hx + 2.5, xB = hx + 3; // overhead outside, drop & enter wall ~1 ft below ceiling
   const lab = ['3/4" G.I.P. per sheet 4 (owner: 1" galv)', 'Sheet 4'];
   // Line A: Mercoid + gauge + Visiprobe
-  run([[px - .5, top - .05, za], [px - .5, yA, za], [px - .5, yA, -2], [14.05, yA, -2], [14.05, 5.85, -2]], .75, MAT.galv, ['Level-control air line (to Mercoid / gauge / Visiprobe)', ...lab], G.piping, ex);
+  run([[px - .5, top - .05, za], [px - .5, yA, za], [px - .5, yA, -2], [xA, yA, -2], [xA, yAi, -2], [14.05, yAi, -2], [14.05, 5.85, -2]], .75, MAT.galv, ['Level-control air line (to Mercoid / gauge / Visiprobe)', ...lab], G.piping, ex);
   valve([px - .5, top + .28, za], 'y', .75, 'ball', ['Brass ball valve at PT top (level-control line)', '3/4" brass ball valve', 'Sheet 4', 'Owner convention 1"; sheet note 3/4" kept in label']);
   // Line B: air compressor, PRV outside
-  run([[px + .5, top - .05, za], [px + .5, yB2, za], [px + .5, yB2, -4.5], [13.4, yB2, -4.5], [13.4, 3.2, -4.5], [13.4, 3.2, -6.3], [13.4, 2.55, -6.3]], .75, MAT.galv, ['Air line to air compressor', ...lab], G.piping, ex);
+  run([[px + .5, top - .05, za], [px + .5, yB2, za], [px + .5, yB2, -4.5], [xB, yB2, -4.5], [xB, yBi, -4.5], [13.4, yBi, -4.5], [13.4, 3.2, -4.5], [13.4, 3.2, -6.3], [13.4, 2.55, -6.3]], .75, MAT.galv, ['Air line to air compressor', ...lab], G.piping, ex);
   valve([px + .5, top + .28, za], 'y', .75, 'ball', ['Brass ball valve at PT top (air line)', '3/4" brass ball valve', 'Sheet 4']);
   { const prv = new THREE.Group(); G.piping.add(prv); const x = 20, y = yB2; seg(V(x, y, -4.5), V(x, y + .25, -4.5), .045, MAT.galv, prv, 8);
     lm(prv, gc('prvb', () => new THREE.SphereGeometry(.11, 14, 10)), MAT.brass, V(x, y + .32, -4.5)); lm(prv, gc('prvs', () => new THREE.CylinderGeometry(.06, .08, .32, 14)), MAT.brass, V(x, y + .55, -4.5)); lm(prv, gc('prvc', () => new THREE.CylinderGeometry(.045, .045, .08, 8)), MAT.brass, V(x, y + .75, -4.5)); box(.2, .02, .03, MAT.ss, x + .08, y + .7, -4.5, prv);
     lm(prv, gc('prvo', () => new THREE.CylinderGeometry(.05, .05, .14, 10)), MAT.brass, V(x + .12, y + .32, -4.5), X1);
     tag(prv, 'Pressure relief valve (outside, compressor line)', '2" PRV set 10 psi above system pressure (sheet 4)', 'Sheet 4', 'Shown on air line outside per owner convention'); }
   for (const xx of [21.5]) { const s = new THREE.Group(); G.piping.add(s); seg(V(xx, Y0, -4.5), V(xx, yB2 - .05, -4.5), .06, MAT.galv, s, 10); box(1.4, .08, .12, MAT.galv, xx, yB2 - .08, -3.25, s).scale.z = 1; box(.12, .08, 2.6, MAT.galv, xx, yB2 - .1, -3.25, s); seg(V(xx, Y0, -2), V(xx, yB2 - .05, -2), .06, MAT.galv, s, 10); tag(s, 'Air line support', 'Galvanized unistrut support', 'ASSUMED'); }
-  for (const zz of [-2, -4.5]) sleeve([hx - t / 2, zz === -2 ? yA : yB2, zz], X1, .75);
+  for (const zz of [-2, -4.5]) sleeve([hx - t / 2, zz === -2 ? yAi : yBi, zz], X1, .75);
   // tee + gauge near Mercoid, braided hose to Visiprobe
-  gauge(V(14.05, 7.4, -2), X1.clone().negate(), G.electrical, .14);
+  gauge(V(14.05, 6.55, -2), X1.clone().negate(), G.electrical, .14);
   const mc = new THREE.Group(); G.electrical.add(mc); box(.34, .55, .26, M(0x6b7076, .45, .45), 14.12, 5.55, -2, mc); lm(mc, gc('mcc', () => new THREE.CylinderGeometry(.12, .12, .05, 18)), MAT.dark, V(13.98, 5.6, -2), X1); box(.05, .4, .05, MAT.galv, 13.98, 5.1, -2, mc);
   tag(mc, 'Mercoid pressure switch + pressure gauge', 'Mercoid control on level-control air line', 'Owner convention', 'Sheet 6 "sight glass & pressure controls" location');
   // Visiprobe = Williams Clear-View
@@ -315,14 +340,15 @@ const XW = hx - t; // inner face east wall
     const e = seg(V(ex2, yt, ez), V(ex2, ye, ez), .01, MAT.ss, vp, 6); const tp = lm(vp, gc('etip', () => new THREE.SphereGeometry(.022, 8, 6)), MAT.brass, V(ex2, ye, ez)); tag(tp, 'Visiprobe electrode – ' + n, `${inch}" of 72" probe (scaled to tube)`, 'Sheet 4'); });
   tag(vp, 'Visiprobe (Williams Clear-View)', 'Clear acrylic sight tube, top/bottom plates, 4 tie rods, electrodes inside', 'Sheet 4/6 + owner photos', 'Electrode heights from sheet 4: 48" off, 28" P1 on, 22" P2 on, 16/12" alarm (scaled to ~4.5\' tube)');
   const jb = box(.5, .55, .22, M(0x8a8f95, .5, .3), XW - .13, 4.4, vz - .62, vp); tag(jb, 'Electrical junction box (Visiprobe)', 'Gray NEMA box', 'Owner photos'); seg(V(XW - .15, 4.68, vz - .62), V(XW - .15, 6.3, vz - .62), .04, MAT.galv, vp, 8); seg(V(XW - .15, 6.3, vz - .62), V(vx, 6.3, vz - .4), .015, MAT.dark, vp, 6);
-  const hose = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(14.05, 6.7, -2), V(13.85, 6.85, -2.3), V(13.8, 6.9, -2.85), V(vx, 6.65, vz), V(vx, yt + .27, vz)]), 24, .035, 8), MAT.hose); vp.add(hose); tag(hose, 'Braided flexible hose', 'SS braided hose, air line to Visiprobe top', 'Owner photos');
-  lm(vp, gc('hft', () => new THREE.CylinderGeometry(.045, .045, .14, 6)), MAT.brass, V(14.05, 6.7, -2), Z1);
+  const hose = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(14.05, 6.25, -2), V(13.85, 6.4, -2.3), V(13.8, 6.5, -2.85), V(vx, 6.6, vz), V(vx, yt + .27, vz)]), 24, .035, 8), MAT.hose); vp.add(hose); tag(hose, 'Braided flexible hose', 'SS braided hose, air line to Visiprobe top', 'Owner photos');
+  lm(vp, gc('hft', () => new THREE.CylinderGeometry(.045, .045, .14, 6)), MAT.brass, V(14.05, 6.25, -2), Z1);
   // bottom: galvanized pipe + red-handle ball valve -> through wall -> buried tie to PT bottom
   run([[vx, yb - .27, vz], [vx, 1.0, vz], [hx + .45, 1.0, vz]], .75, MAT.galv, ['Visiprobe bottom tie (to PT bottom)', '3/4" galvanized', 'Owner convention', 'ASSUMED route'], G.piping, { col: true });
   valve([vx, 1.25, vz], 'y', .75, 'ball', ['Visiprobe bottom ball valve', '3/4" ball valve, red handle', 'Owner photos'], G.piping, X1.clone().negate());
   run([[hx + .45, 1.0, vz], [hx + .45, Y0 - 1, vz]], .75, MAT.galv, null, G.piping, { col: true });
-  U([[hx + .45, Y0 - 1, vz], [hx + .45, Y0 - 2.5, vz], [px - 1.2, Y0 - 2.5, vz], [px - 1.2, Y0 - 2.5, pz], [px, Y0 - 2.5, pz], [px, Y0 - 1, pz]], .75, ['Sight-tube bottom tie (buried)', '3/4" line, buried white PVC', 'Owner convention', 'ASSUMED route']);
-  run([[px, Y0 - 1, pz], [px, PCY - PT.dia / 2 + .02, pz]], .75, MAT.galv, ['Bottom tie riser at PT', '3/4" galvanized', 'Owner convention'], G.piping, { col: true });
+  const vtx = px - 1, vtz = pz - PT.len / 2 + 2.6, vnz = pz - PT.len / 2 + 3.9; // riser outside (west of) PT No.1 inlet-end footer
+  U([[hx + .45, Y0 - 1, vz], [hx + .45, Y0 - 2.5, vz], [vtx, Y0 - 2.5, vz], [vtx, Y0 - 2.5, vtz], [vtx, Y0 - 1, vtz]], .75, ['Sight-tube bottom tie (buried)', '3/4" line, buried white PVC', 'Owner convention', 'ASSUMED route']);
+  run([[vtx, Y0 - 1, vtz], [vtx, Y0 + 1.6, vtz], [vtx, Y0 + 1.6, vnz], [vtx, PCY - Math.sqrt((PT.dia / 2) ** 2 - 1) + .02, vnz]], .75, MAT.galv, ['Bottom tie riser at PT', '3/4" galvanized; rises outside the saddle footer, short horizontal to tank bottom', 'Owner convention'], G.piping, { col: true });
   // air compressor
   const ac = new THREE.Group(); G.electrical.add(ac); const cx = 12.9, cz = -6.3;
   lm(ac, gc('acr', () => new THREE.CapsuleGeometry(.5, 1.6, 8, 24)), M(0x5c666f, .45, .4), V(cx, 1.05, cz), X1);
@@ -352,25 +378,32 @@ const XW = hx - t; // inner face east wall
 }
 // ---------- YARD PIPING: buried white PVC, DI risers only where pipe leaves the ground ----------
 const w11 = S.wells[0].pos, w12 = S.wells[1].pos, yD = YB, yS = YB - .5, yO = YB - .3;
+const TLM = d => rOD(d) * 2.2;
 const bv = (p, ax, d, info) => valve(p, ax, d, 'gate', info, G.piping, UP, { buried: true });
 U([[w11[0], Y0 - 1, w11[1] + 5], [w11[0], YB, w11[1] + 5], [w11[0], YB, 14], [P.well11.x, YB, 14], [P.well11.x, YB, hz + .75], [P.well11.x, Y0 - 1, hz + .75]], 6, ['Prop. 6" W.M. from Well No. 11 (buried)', '6" water main, white PVC, ~3 ft cover', 'Sheets 3, 6', 'Route simplified; buried']);
 U([[w12[0] + 5, Y0 - 1, w12[1]], [w12[0] + 5, YB + .5, w12[1]], [w12[0] + 5, YB + .5, 16], [P.well12.x, YB + .5, 16], [P.well12.x, YB + .5, hz + .75], [P.well12.x, Y0 - 1, hz + .75]], 4, ['Prop. 4" W.M. from Well No. 12 (buried)', '4" water main, white PVC', 'Sheets 3, 6', 'Route simplified; buried']);
-U([[P.well11.x, Y0 - 1, -hz - .75], [P.well11.x, YB, -hz - .75], [P.well11.x, YB, -12]], 6, ['Well 11 discharge to GST fill (buried)', '6" white PVC', 'Sheet 6']);
-U([[P.well12.x, Y0 - 1, -hz - .75], [P.well12.x, YB + .5, -hz - .75], [P.well12.x, YB + .5, -11.5], [P.well12.x - .6, YB, -12]], 4, ['Well 12 discharge to GST fill (buried)', '4" white PVC', 'Sheet 6']);
-U([[-3.0, YB, -12], [-20, YB, -12], [-20, YB, -67], [-16.3, YB, -67]], 8, ['Prop. 8" W.M. fill line to G.S.T.s (buried)', '8" white PVC', 'Sheet 3', 'Fills GST; side/route simplified']);
-U([[-20, YB, -38], [-16.3, YB, -38]], 8, ['Fill branch to GST No. 1', '8" white PVC', 'Sheet 3']);
+U([[P.well11.x, Y0 - 1, -hz - .75], [P.well11.x, YB, -hz - .75], [P.well11.x, YB, -10], [P.well11.x - 1.4, YB, -10], [P.well11.x - 1.4, YB, -12 + TLM(8)]], 6, ['Well 11 discharge to GST fill (buried)', '6" white PVC', 'Sheet 6']);
+U([[P.well12.x, Y0 - 1, -hz - .75], [P.well12.x, YB, -hz - .75], [P.well12.x, YB, -12 + TLM(8)]], 4, ['Well 12 discharge to GST fill (buried)', '4" white PVC', 'Sheet 6']);
+mjTee([P.well11.x - 1.4, YB, -12], X1, Z1, 8, 6); mjTee([P.well12.x, YB, -12], X1, Z1, 8, 4); mjCap([-2.6, YB, -12], X1, 8);
+U([[-2.6, YB, -12], [-20, YB, -12], [-20, YB, -67], [-16.3, YB, -67], [-16.3, Y0 - 1, -67]], 8, ['Prop. 8" W.M. fill line to G.S.T.s (buried)', '8" white PVC', 'Sheet 3', 'Fills GST; side/route simplified']);
+mjTee([-20, YB, -38], Z1, X1, 8);
+U([[-20, YB, -38], [-16.3, YB, -38], [-16.3, Y0 - 1, -38]], 8, ['Fill branch to GST No. 1', '8" white PVC', 'Sheet 3']);
 for (const z of [-38, -67]) bv([-18.2, YB, z], 'x', 8, ['GST inlet gate valve (buried)', '8" gate valve w/ adj. valve box', 'Sheet 3']);
-U([[6.3, yS, -67], [14, yS, -67], [14, yS, -11], [P.gst_suction_in.x, yS, -11], [P.gst_suction_in.x, yS, -hz - .75], [P.gst_suction_in.x, Y0 - 1, -hz - .75]], 8, ['8" GST outlet / suction to pump station (buried)', '8" white PVC', 'Sheets 3, 5, 6']);
-U([[6.3, yS, -38], [14, yS, -38]], 8, ['GST No. 1 outlet branch', '8" white PVC', 'Sheet 3']);
+U([[6.3, Y0 - 1, -67], [6.3, yS, -67], [14, yS, -67], [14, yS, -11], [P.gst_suction_in.x, yS, -11], [P.gst_suction_in.x, yS, -hz - .75], [P.gst_suction_in.x, Y0 - 1, -hz - .75]], 8, ['8" GST outlet / suction to pump station (buried)', '8" white PVC', 'Sheets 3, 5, 6']);
+mjTee([14, yS, -38], Z1, X1.clone().negate(), 8);
+U([[6.3, Y0 - 1, -38], [6.3, yS, -38], [14, yS, -38]], 8, ['GST No. 1 outlet branch', '8" white PVC', 'Sheet 3']);
 for (const z of [-38, -67]) bv([10, yS, z], 'x', 8, ['GST suction-side gate valve (buried)', '8" gate valve w/ valve box', 'Sheet 3']);
-// distribution to PTs (buried), PT bottom DI risers with valves
-U([[P.to_distribution.x, Y0 - 1, -9.4], [P.to_distribution.x, yD, -9.4], [pts[1].center[0], yD, -9.4], [pts[1].center[0], yD, pts[1].center[1] - 4], [pts[1].center[0], Y0 - 1, pts[1].center[1] - 4]], 8, ['8" header to pressure tanks (buried)', 'Prop. 8" W.M., white PVC', 'Sheet 3']);
-U([[pts[0].center[0], yD, -9.4], [pts[0].center[0], yD, pts[0].center[1] - 4], [pts[0].center[0], Y0 - 1, pts[0].center[1] - 4]], 8, ['8" branch to PT No. 1 (buried)', '8" white PVC', 'Sheet 3']);
+// distribution to PTs (buried). PT risers come up OUTSIDE the saddle footers, then a short flanged horizontal + 90 into the tank bottom
+const PTR = PT.len / 2 - 2.3, PTN = PT.len / 2 - 3.5; // riser / bottom-nozzle offsets from PT center (footers end at 7.8)
+U([[P.to_distribution.x, Y0 - 1, -9.4], [P.to_distribution.x, yD, -9.4], [pts[1].center[0], yD, -9.4], [pts[1].center[0], yD, pts[1].center[1] - PTR], [pts[1].center[0], Y0 - 1, pts[1].center[1] - PTR]], 8, ['8" header to pressure tanks (buried)', 'Prop. 8" W.M., white PVC', 'Sheet 3']);
+mjTee([pts[0].center[0], yD, -9.4], X1, Z1, 8);
+U([[pts[0].center[0], yD, -9.4], [pts[0].center[0], yD, pts[0].center[1] - PTR], [pts[0].center[0], Y0 - 1, pts[0].center[1] - PTR]], 8, ['8" branch to PT No. 1 (buried)', '8" white PVC', 'Sheet 3']);
 for (const p of pts) { const [x, z] = p.center, yb = PCY - PT.dia / 2;
-  for (const [zz, nm, extra] of [[z - 4, 'inlet', 'Inlet off tank bottom'], [z + 4, 'outlet', 'Outlet off tank bottom (no meter/check)']]) {
-    run([[x, yb + .02, zz], [x, Y0 - 1, zz]], 8, MAT.di, [`${p.name} ${nm} riser`, `8" FL DI riser from tank bottom into ground`, 'Sheets 3, 4', extra], G.piping, { fl: 'a' });
-    valve([x, yb - .1 - .48, zz], 'y', 8, 'gate', [`${p.name} ${nm} gate valve`, '8" gate valve', 'Sheet 4'], G.piping, X1); }
-  U([[x, Y0 - 1, z + 4], [x, yO, z + 4], [x, yO, 22], ...(x === pts[0].center[0] ? [] : [[pts[0].center[0], yO, 22]])], 8, [`${p.name} outlet to mains (buried)`, '8" white PVC', 'Sheets 3, 4']); }
+  for (const [sg_, nm, extra] of [[-1, 'inlet', 'Inlet off tank bottom; riser outside saddle footer'], [1, 'outlet', 'Outlet off tank bottom (no meter/check); riser outside saddle footer']]) { const zr = z + sg_ * PTR, zn = z + sg_ * PTN, yh = Y0 + 1.75;
+    run([[x, yb + .02, zn], [x, yh, zn], [x, yh, zr], [x, Y0 - 1, zr]], 8, MAT.di, [`${p.name} ${nm} riser`, `8" FL DI: tank-bottom nozzle, FL 90, short FL horizontal, FL 90, riser into ground outside footer`, 'Sheets 3, 4 / owner', extra], G.piping, { fl: 'a', R: .45 });
+    valve([x, Y0 + .45, zr], 'y', 8, 'gate', [`${p.name} ${nm} gate valve`, '8" gate valve', 'Sheet 4'], G.piping, Z1.clone().multiplyScalar(sg_)); }
+  U([[x, Y0 - 1, z + PTR], [x, yO, z + PTR], [x, yO, 22], ...(x === pts[0].center[0] ? [] : [[pts[0].center[0], yO, 22]])], 8, [`${p.name} outlet to mains (buried)`, '8" white PVC', 'Sheets 3, 4']); }
+mjTee([pts[0].center[0], yO, 22], Z1, X1, 8);
 U([[pts[0].center[0], yO, 22], [pts[0].center[0], yO, 52], [-30, yO, 52]], 8, ['Prop. 8" W.M. to distribution (buried)', '8" white PVC; tie-in to ex. 3" W.M. (tapping sleeve & valve) / future 8"', 'Sheet 3 inset A']);
 run([[-150, yO, 54], [150, yO, 54]], 3, M(0x6c7a89, .5, .2), ['Existing 3" W.M. (buried)', 'Ex. 3" W.M. along FM 1653', 'Sheet 3'], G.piping, { col: false });
 // ---------- TANKS (all white) ----------
