@@ -61,8 +61,10 @@ function run(pts, d, mat, info, g = G.piping, o = {}) {
   const tr = P.map(() => 0), dirs = []; for (let i = 0; i < P.length - 1; i++) dirs.push(P[i + 1].clone().sub(P[i]).normalize());
   for (let i = 1; i < P.length - 1; i++) { if (dirs[i - 1].dot(dirs[i]) > .999) continue; tr[i] = Math.min(R0, P[i].distanceTo(P[i - 1]) * .45, P[i].distanceTo(P[i + 1]) * .45); }
   const collar = (p, dir) => { const m = lm(grp, ucyl(r * 1.17, sg), mat, p, dir); m.scale.y = r * 1.5; };
-  for (let i = 0; i < P.length - 1; i++) { const a = P[i].clone().addScaledVector(dirs[i], tr[i]), b = P[i + 1].clone().addScaledVector(dirs[i], -tr[i + 1]); seg(a, b, r, mat, grp, sg);
-    if (mj) { const L = a.distanceTo(b); for (let k = 18; k < L - 3; k += 18) pbell(grp, a.clone().addScaledVector(dirs[i], k), dirs[i], d); } }
+  for (let i = 0; i < P.length - 1; i++) { const a = P[i].clone().addScaledVector(dirs[i], tr[i]), b = P[i + 1].clone().addScaledVector(dirs[i], -tr[i + 1]);
+    // MJ runs: vertical end legs are the DI riser continuing below grade into the MJ bell; PVC only on horizontals
+    const diLeg = mj && (i === 0 || i === P.length - 2) && Math.abs(dirs[i].y) > .99; seg(a, b, r, diLeg ? MAT.di : mat, grp, sg);
+    if (mj && !diLeg) { const L = a.distanceTo(b); for (let k = 18; k < L - 3; k += 18) pbell(grp, a.clone().addScaledVector(dirs[i], k), dirs[i], d); } }
   for (let i = 1; i < P.length - 1; i++) { if (!tr[i]) continue; const a = dirs[i - 1], b = dirs[i], R = tr[i], c = P[i];
     let m; if (Math.abs(a.dot(b)) < 1e-3) { m = new THREE.Mesh(gc(`el${r.toFixed(4)},${R.toFixed(3)},${sg}`, () => new THREE.TubeGeometry(new Arc(R), 10, r, sg)), em); m.quaternion.setFromRotationMatrix(_mx.makeBasis(a, b, a.clone().cross(b))); m.position.copy(c); }
     else m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(c.clone().addScaledVector(a, -R), c, c.clone().addScaledVector(b, R)), 8, r, sg), em);
@@ -288,7 +290,7 @@ S.pumps.x.forEach((x, i) => { const mk = S.pumps.marks[i]; pump(x, mk, P0);
 run([[sh.x0, SHY, sh.z], [sh.x1, SHY, sh.z]], 8, MAT.di, ['Suction header', '8" FL DI (109), from GST', 'Sheet 6', 'Elevation set by eccentric reducers – ASSUMED (owner: suction low)'], G.piping, { blind: true });
 run([[dh.x0, dh.y, dh.z], [dh.x1, dh.y, dh.z]], 8, MAT.di, ['Pressure (discharge) header', '8" FL DI', 'Sheet 6', 'Elevation ASSUMED (owner: pressure above suction)'], G.piping, { blind: true });
 // GST suction in (north wall) and to distribution — DI risers outside drop into ground
-run([[P.gst_suction_in.x, Y0 - 1, -hz - .75], [P.gst_suction_in.x, SHY, -hz - .75], [P.gst_suction_in.x, SHY, sh.z - TL(8)]], 8, MAT.di, ['8" from G.S.T. (suction)', '8" wall sleeve (108) + FL DI; DI riser out of ground outside wall', 'Sheet 6']);
+run([[P.gst_suction_in.x, Y0 - 1, -hz - .75], [P.gst_suction_in.x, SHY, -hz - .75], [P.gst_suction_in.x, SHY, sh.z - TL(8)]], 8, MAT.di, ['8" from G.S.T. (suction)', '8" wall sleeve (108) + FL DI; DI riser continues below grade into buried MJ 90', 'Sheet 6'], G.piping, { fl: 'b' });
 tee([P.gst_suction_in.x, SHY, sh.z], X1, Z1.clone().negate(), 8, TL(8), MAT.di);
 tee([P.to_distribution.x, dh.y, dh.z], X1, Z1.clone().negate(), 8, TL(8), MAT.di);
 run([[P.to_distribution.x, dh.y, dh.z - TL(8)], [P.to_distribution.x, dh.y, -9.4], [P.to_distribution.x, Y0 - 1, -9.4]], 8, MAT.di, ['8" to distribution / pressure tanks', '8" FL DI, 8" 90s (111/113), wall sleeve; DI riser down into ground', 'Sheets 6, 8'], G.piping, { fl: 'a' });
@@ -298,7 +300,7 @@ for (const [x, z] of [[-4.2, 5.5], [1, -6.8], [12, 6.5]]) { const hb = run([[x, 
 // ---------- WELL LINES (wall to wall, DI risers out of ground both sides) ----------
 for (const [key, meter, nm] of [['well11', '4" Census Octave ultrasonic meter (133)', 'Well 11'], ['well12', '2" Census Octave ultrasonic meter (132)', 'Well 12']]) {
   const L = P[key], x = L.x, d = L.d, y = 2.2, r = rOD(d);
-  run([[x, Y0 - 1, hz + .75], [x, y, hz + .75], [x, y, -hz - .75], [x, Y0 - 1, -hz - .75]], d, MAT.di, [L.desc.split(',')[0], `${d}" FL DI through building; DI risers out of ground at walls`, 'Sheet 6', 'Passes wall to wall, no pump connection']);
+  run([[x, Y0 - 1, hz + .75], [x, y, hz + .75], [x, y, -hz - .75], [x, Y0 - 1, -hz - .75]], d, MAT.di, [L.desc.split(',')[0], `${d}" FL DI through building; DI risers out of ground at walls`, 'Sheet 6', 'Passes wall to wall, no pump connection; DI continues below grade into buried MJ 90s'], G.piping, { fl: false, ef: true });
   for (const zz of [hz - t / 2, -hz + t / 2]) sleeve([x, y, zz], Z1, d);
   valve([x, y, 5.5], 'z', d, 'gate', [`${d}" gate valve (${nm} line)`, `${d}" gate valve`, 'Sheet 6'], G.piping, x < -4 ? UP : UP);
   valve([x, y, 3.4], 'z', d, 'check', [`${d}" swing check (${nm} line)`, `${d}" swing check valve (131)`, 'Sheet 6']);
@@ -467,7 +469,7 @@ const views = { out: [V(95, 70, 95), V(5, 2, -15)], inn: [V(-3.5, 6.3, 6.5), V(5
 function setView(k) { setWalk(false); if (k === 'inn') $('info').classList.add('hide'); const [p, tg] = views[k]; camera.position.copy(p); orbit.target.copy(tg); orbit.update(); setVis('roof', k !== 'inn'); }
 let walk = false, yaw = 0, pitch = 0; const keys = {}, joy = { x: 0, y: 0 };
 function setWalk(on) { walk = on; orbit.enabled = !on; $('vWalk').classList.toggle('on', on); $('joy').style.display = on && MOBILE ? 'block' : 'none';
-  if (on) { camera.position.set(0, 5.5, 13); closeCard(); $('info').classList.add('hide'); yaw = 0; pitch = 0; setVis('roof', false); hint(MOBILE ? 'Joystick to walk · drag to look' : 'WASD / arrows to walk · drag to look · Q/E up/down'); } }
+  if (on) { camera.position.set(0, 5.5, 13); closeCard(); $('info').classList.add('hide'); yaw = 0; pitch = 0; setVis('roof', false); hint(MOBILE ? 'Joystick to walk (push to edge to run) · drag to look' : 'WASD / arrows to walk · Shift to run · drag to look · Q/E up/down'); } }
 let hintT; function hint(s) { const h = $('hint'); h.textContent = s; h.style.display = 'block'; clearTimeout(hintT); hintT = setTimeout(() => h.style.display = 'none', 3500); }
 addEventListener('keydown', e => keys[e.code] = true); addEventListener('keyup', e => keys[e.code] = false);
 const cv = renderer.domElement; let down = null;
@@ -501,7 +503,7 @@ function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.asp
 addEventListener('resize', resize); resize(); setView('out');
 const clock = new THREE.Clock(), tmp = V(0, 0, 0); let fN = 0, fT = performance.now(); window.__fps = 0;
 renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05);
-  if (walk) { const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - joy.y, s = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + joy.x, sp = (keys.ShiftLeft ? 20 : 8) * dt;
+  if (walk) { const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - joy.y, s = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + joy.x, jm = Math.hypot(joy.x, joy.y), run_ = keys.ShiftLeft || keys.ShiftRight || jm > .92, sp = (run_ ? 50 : 22) * dt;
     camera.position.x += (-Math.sin(yaw) * f + Math.cos(yaw) * s) * sp; camera.position.z += (-Math.cos(yaw) * f - Math.sin(yaw) * s) * sp; camera.position.y = Math.max(1.5, camera.position.y + ((keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0)) * sp);
     camera.rotation.set(pitch, yaw, 0, 'YXZ'); } else orbit.update();
   renderer.render(scene, camera); fN++; const nw = performance.now(); if (nw - fT > 1000) { window.__fps = fN * 1000 / (nw - fT); fN = 0; fT = nw; }
