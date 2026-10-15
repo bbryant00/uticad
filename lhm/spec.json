@@ -1,0 +1,384 @@
+{
+ "project": {
+  "name": "Little Hope Moore WSC \u2013 FM 1653 Plant No. 3 Improvements",
+  "engineer": "Stephens Engineering, Longview TX",
+  "job": "LHM-23-01",
+  "county": "Van Zandt County, TX",
+  "src": "cover/title blocks"
+ },
+ "coords": {
+  "units": "ft",
+  "origin": "pump station building center at finished floor",
+  "x": "sheet-right (approx. east; true north arrow is rotated ~45\u00b0, sheet 3)",
+  "z": "sheet-down (approx. south)",
+  "y": "up; y=0 = FFE 533.00",
+  "calibration": "site plan scale bar 1\"=20' (sheet 3); building 30'x16' measured 150x80 px in crop = 5 px/ft, GST 19' dia check \u00b11'. Plan positions \u00b11-2 ft."
+ },
+ "site": {
+  "ffe": {
+   "v": 533.0,
+   "src": "3 (PROP. HSPS BLDG FFE=533.00)"
+  },
+  "grade": {
+   "y": -0.5,
+   "src": "3 contours 530-532 near bldg",
+   "assumed": "flat grade 6\" below FFE"
+  },
+  "drive": {
+   "desc": "6\" crushed limestone access drive ~550 SY from FM 1653",
+   "poly": null,
+   "src": "3 note 3 / hatched area",
+   "assumed": "outline traced roughly",
+   "rects": [
+    [
+     -87,
+     -163,
+     -57,
+     55
+    ],
+    [
+     -153,
+     9,
+     -7,
+     55
+    ]
+   ]
+  },
+  "fence": {
+   "desc": "Proposed 6' security fence (by others), dbl 8' gates",
+   "height": 6,
+   "rect": [
+    -40,
+    -115,
+    70,
+    52
+   ],
+   "src": "3",
+   "assumed": "fence line extent approximated \u2013 partially off crop"
+  },
+  "flume": {
+   "desc": "98 LF 3' wide concrete curbed flume",
+   "x": 95,
+   "z0": -35,
+   "z1": 62,
+   "w": 3,
+   "src": "3"
+  },
+  "storm": {
+   "desc": "120 LF 12\" HDPE storm drain (by others)",
+   "src": "3"
+  },
+  "utility_pole": {
+   "pos": [
+    5,
+    68
+   ],
+   "src": "12 E2"
+  }
+ },
+ "building": {
+  "name": "High Service Pump Station",
+  "L": 30,
+  "W": 16,
+  "center": [
+   0,
+   0
+  ],
+  "src": "6 (30' and 16' dims)",
+  "wall": {
+   "t": 0.67,
+   "type": "8x8x16 CMU",
+   "src": "7/8"
+  },
+  "plate": {
+   "h": 8,
+   "src": "8 (8' PLATE)"
+  },
+  "roof": {
+   "type": "gable, ridge along 30' axis, 24 ga R-panel, pre-eng trusses @24\"",
+   "pitch": "4:12",
+   "overhang": 1.0,
+   "src": "7/8",
+   "assumed": "pitch and overhang scaled from elevations, not dimensioned"
+  },
+  "rooms": [
+   {
+    "name": "Chlorine Room",
+    "x0": -15,
+    "x1": -5.6,
+    "z0": -8,
+    "z1": -1.4,
+    "door": "exterior west door (2) 3'0\"x7'0\" w/ 12x12 vision",
+    "src": "6/8",
+    "assumed": "room width 9.4' scaled"
+   },
+   {
+    "name": "Storage Room (phosphate)",
+    "x0": -15,
+    "x1": -5.6,
+    "z0": -1.4,
+    "z1": 8,
+    "src": "6"
+   },
+   {
+    "name": "Pump Room",
+    "x0": -5.6,
+    "x1": 15,
+    "z0": -8,
+    "z1": 8,
+    "src": "6"
+   }
+  ],
+  "doors": [
+   {
+    "mark": 1,
+    "desc": "(2)-3'0\"x7'0\" hollow core steel w/ astragal",
+    "wall": "south",
+    "x": 0,
+    "w": 6,
+    "h": 7,
+    "src": "6 door schedule",
+    "assumed": "x scaled"
+   },
+   {
+    "mark": 2,
+    "desc": "3'0\"x7'0\" steel, chlorine room",
+    "wall": "west",
+    "z": -4.7,
+    "w": 3,
+    "h": 7,
+    "src": "6"
+   },
+   {
+    "mark": 2,
+    "desc": "3'0\"x7'0\" steel, storage room",
+    "wall": "west",
+    "z": 4.7,
+    "w": 3,
+    "h": 7,
+    "src": "6"
+   }
+  ],
+  "windows": [
+   {
+    "mark": "A",
+    "desc": "2'0\"Hx4'0\"W awning",
+    "wall": "north",
+    "x": [
+     -2,
+     10
+    ],
+    "src": "6/8",
+    "assumed": "positions scaled"
+   }
+  ],
+  "louvers": "12x12 gravity louvers + wall mtd motorized SS ventilators 200 CFM (sheet 6)"
+ },
+ "pumps": {
+  "marks": [
+   "P101",
+   "P102",
+   "P103"
+  ],
+  "type": "End suction centrifugal, 600 GPM @ 185' TDH, 40 HP",
+  "src": "6 dims 2' / 3'-4\" / 2' / 3'-4\" / 2' / 5'-7\" from east wall",
+  "pad": {
+   "w": 2,
+   "l": 4.67,
+   "h": 1.5,
+   "desc": "2'-0\"x4'-8\"x18\" concrete pump pad",
+   "src": "6"
+  },
+  "x": [
+   -2.25,
+   3.08,
+   8.42
+  ],
+  "z": -1.0,
+  "note": "P103 per schedule; E-sheets show P101/P102 power \u2013 P103 may be future",
+  "note2": "Pump orientation/header assignment scaled from plan & set per owner convention (suction header low near N wall, pressure header high over pumps) \u2013 ASSUMED"
+ },
+ "piping": {
+  "suction_header": {
+   "d": 8,
+   "z": -5.6,
+   "y": 1.25,
+   "x0": -1,
+   "x1": 9.5,
+   "src": "6 (109 8\" spool FxF)",
+   "assumed": "centerline elevation"
+  },
+  "discharge_header": {
+   "d": 8,
+   "z": -3.0,
+   "y": 6.0,
+   "x0": -3,
+   "x1": 9.5,
+   "src": "6",
+   "assumed": "elevation (owner convention: pressure header above suction)"
+  },
+  "pump_suction": "8\" tee (101) -> 8\" gate (102) -> 8\"x4\" eccentric reducer (104) -> pump",
+  "pump_discharge": "4\"x2\" / 8\"x6\" reducer (112) -> 8\" silent check (103) -> 8\" gate (102) -> header tee (101)",
+  "gst_suction_in": {
+   "d": 8,
+   "x": 0.8,
+   "wall": "north",
+   "desc": "8\" from G.S.T.",
+   "src": "6"
+  },
+  "to_distribution": {
+   "d": 8,
+   "x": 7.0,
+   "wall": "north",
+   "desc": "8\" to distribution (111/113/116)",
+   "src": "6"
+  },
+  "well11": {
+   "d": 6,
+   "x": -4.6,
+   "desc": "Prop. 6\" W.M. from Well No. 11, through building to GST",
+   "src": "6/3"
+  },
+  "well12": {
+   "d": 4,
+   "x": -3.6,
+   "desc": "Prop. 4\" W.M. from Well No. 12, through building to GST",
+   "src": "6/3"
+  },
+  "flowmeters": {
+   "desc": "Census Octave ultrasonic 4\" & 2\" (132/133)",
+   "src": "6"
+  },
+  "chlorine": {
+   "desc": "1-1/2\" chlorine solution line reduced to 1\" at corporation; wall-mounted chlorinators, electronic scales, 150 lb cyls",
+   "src": "6/7"
+  },
+  "phosphate": {
+   "desc": "1\" phosphate solution line",
+   "src": "6"
+  },
+  "yard_8in": {
+   "desc": "Prop. 8\" W.M. GST/PT/distribution, 95 LF + spools",
+   "src": "3"
+  },
+  "material": "125 lb flanged DI inside; owner convention reddish-brown primer"
+ },
+ "gst": [
+  {
+   "name": "GST No. 1",
+   "cap": "50,000 gal",
+   "center": [
+    -5,
+    -38
+   ],
+   "src": "3"
+  },
+  {
+   "name": "GST No. 2",
+   "cap": "50,000 gal",
+   "center": [
+    -5,
+    -67
+   ],
+   "src": "3"
+  },
+  {
+   "name": "Future GST",
+   "cap": "50,000 gal (future)",
+   "center": [
+    -4,
+    -95
+   ],
+   "future": true,
+   "src": "3"
+  }
+ ],
+ "gst_dims": {
+  "height": 24,
+  "dia": 19,
+  "overflow": 556.0,
+  "fill_off": 555.5,
+  "fill_on": 551.5,
+  "low_alarm": 545.0,
+  "base": 533.0,
+  "src": "5 tank dimension/elevation schedule",
+  "note": "column labels C-G inferred from schedule order (overflow/fill off/fill on/low alarm/base)",
+  "accessories": "30\"x30\" hatch, 10\" vent, 8\" overflow w/flap, 30\" manway, 4\" drain w/gate, 8\" inlet & 8\" outlet 125 lb flg (inlet 12\" AFF), ladder, 3\" electrode coupling (sheet 5)",
+  "electrodes_owner": "S1 well off, S2 well on, S3 indicator, S4 emergency ~2-3' up (owner convention); sheet 5 says verify electrode heights"
+ },
+ "pressure_tanks": [
+  {
+   "name": "PT No. 1",
+   "center": [
+    28,
+    9
+   ],
+   "src": "3"
+  },
+  {
+   "name": "PT No. 2",
+   "center": [
+    46.5,
+    9
+   ],
+   "src": "3"
+  }
+ ],
+ "pt_dims": {
+  "dia": 6,
+  "len": 24,
+  "cap": "5,000 gal hydropneumatic",
+  "axis": "z (sheet vertical)",
+  "inlet": "8\" inlet/outlet",
+  "prv": "2\" pressure relief set 10 psi above system",
+  "level": "72\" probe; 48\" E9/E7 all pumps off, 28\" E8 HSP1 on (lead), 22\" E6 HSP2 on (lag), 16\" E3 alarm off, 12\" E2 alarm on",
+  "lines": "3/4\" G.I.P. to level control & air compressor (sheet says 3/4\"; owner convention 1\")",
+  "src": "4"
+ },
+ "air_compressor": {
+  "desc": "3 HP, 125 psi",
+  "pos": [
+   13.3,
+   -6.5
+  ],
+  "src": "6 air compressor schedule"
+ },
+ "generator": {
+  "desc": "Generac SD 150 kW industrial diesel",
+  "pos": [
+   8.3,
+   19
+  ],
+  "size": [
+   5,
+   12
+  ],
+  "src": "16 schedule / 12 E2 location",
+  "assumed": "footprint size",
+  "note": "footprint scaled from E2 symbol; size ASSUMED"
+ },
+ "wells": [
+  {
+   "name": "Well No. 11 (by others)",
+   "pos": [
+    -50,
+    -155
+   ],
+   "src": "12 E2"
+  },
+  {
+   "name": "Well No. 12 (by others)",
+   "pos": [
+    -128,
+    -3
+   ],
+   "src": "12 E2",
+   "note": "sheet 3 label position differs; E2 used"
+  }
+ ],
+ "panels": {
+  "desc": "Electrical panels along east & south pump-room walls; control panel (Turner 625D style per owner)",
+  "src": "6",
+  "assumed": "Turner panel style"
+ }
+}

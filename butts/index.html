@@ -1,0 +1,195 @@
+<!doctype html><html><head><meta charset="utf-8"><title>UtiCAD</title>
+<link rel="manifest" href="../manifest.webmanifest"><meta name="theme-color" content="#1a3a52">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png"><link rel="icon" href="../favicon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="UtiCAD"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f4f1ea;font-family:ui-monospace,Menlo,Consolas,monospace;color:#222}
+#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+#scroller{height:600vh}
+#cap{position:fixed;left:24px;bottom:56px;max-width:360px;background:rgba(250,248,242,.92);border:1px solid #333;padding:12px 14px;font-size:12px;line-height:1.45;box-shadow:3px 3px 0 #333}
+#cap b{display:block;font-size:13px;letter-spacing:.06em;margin-bottom:4px}
+#cap .src{color:#666;margin-top:6px;font-size:11px}
+#title{position:fixed;top:24px;left:24px;font-size:13px;letter-spacing:.12em;border-bottom:1px solid #222;padding-bottom:4px}
+#final{position:fixed;top:70px;left:0;right:0;text-align:center;font-size:34px;letter-spacing:.14em;opacity:0;pointer-events:none;text-shadow:0 0 12px #f4f1ea,0 0 4px #f4f1ea}
+#foot{position:fixed;bottom:12px;left:24px;right:24px;font-size:10.5px;color:#666}
+#prog{position:fixed;right:24px;top:24px;font-size:11px;color:#555}
+#c{touch-action:pan-y}
+@media (max-width:600px){#title{top:calc(12px + env(safe-area-inset-top));left:12px;right:70px;font-size:11px;letter-spacing:.06em}
+#prog{top:calc(12px + env(safe-area-inset-top));right:12px}
+#cap{left:12px;right:12px;max-width:none;bottom:calc(60px + env(safe-area-inset-bottom));font-size:13px}
+#cap b{font-size:14px}#final{font-size:20px;top:90px}#foot{left:12px;right:12px;bottom:calc(8px + env(safe-area-inset-bottom));font-size:10px}}
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+</head><body>
+<canvas id="c"></canvas><div id="scroller"></div>
+<div id="title">BUTTS ROAD WATER PLANT · SAN AUGUSTINE RURAL WSC</div>
+<div id="prog"></div>
+<div id="cap"></div>
+<div id="final">UTICAD · BUTTS PLANT</div>
+<div id="foot">Note: yard layout is schematic (not to survey). Building wall height 10'-0" assumed. Plan per Fontaine sheets. Scroll ↓ to build, ↑ to reverse.</div>
+<script type="module">
+import * as THREE from 'three';
+const STAGES=[
+ ["01 · FLOOR PLAN","20'-0\" × 25'-0\" CMU pump building. Piping room north, controls + chlorination south, porch at south door.","Source: Fontaine — building floor plan sheet"],
+ ["02 · WALLS","8\" CMU walls extrude to 10'-0\" (assumed). Doors 3'-0\" × 6'-8\".","Source: Fontaine — floor plan / wall section"],
+ ["03 · PUMPS & PIPING","3× PACO 12709 15 HP horizontal boosters. 6\" suction header on floor; 4\" discharge header topside. Each stack: 3\" gate, 4\"×3\" reducer, 4\" check, 4\" gate, tee.","Source: Fontaine — piping plan & pump details"],
+ ["04 · YARD","50,000 gal GST 15.5' Ø × 35' H (NE), 6,000 gal pressure tank 6' × 28' (E), generator 41\"×112\" on 5'×10' pad and well on 5'×10' slab (W).","Source: Fontaine — site plan (schematic)"],
+ ["05 · ROOF","Roof with 2' overhang, 24' × 29' (shown translucent).","Source: Fontaine — building section / roof"]];
+const canvas=document.getElementById('c');
+const R=new THREE.WebGLRenderer({canvas,antialias:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));R.setClearColor(0xf4f1ea);
+R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;
+const S=new THREE.Scene();
+const cam=new THREE.OrthographicCamera(-1,1,1,-1,-500,1000);
+S.add(new THREE.HemisphereLight(0xffffff,0xe0dace,2.2));
+const sun=new THREE.DirectionalLight(0xffffff,1.4);sun.position.set(-40,80,30);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-70,right:70,top:70,bottom:-70,near:1,far:250});
+sun.shadow.radius=6;sun.target.position.set(10,0,10);S.add(sun,sun.target);
+const INK=0x1d1d1d;
+const lineMat=()=>new THREE.LineBasicMaterial({color:INK,transparent:true});
+const white=()=>new THREE.MeshStandardMaterial({color:0xfbfaf6,roughness:.95,transparent:true});
+function M(geo,parent,{x=0,y=0,z=0,mat,edge=true,shadow=true}={}){
+  const m=new THREE.Mesh(geo,mat||white());m.position.set(x,y,z);m.castShadow=shadow;m.receiveShadow=true;
+  if(edge){const l=new THREE.LineSegments(new THREE.EdgesGeometry(geo,25),lineMat());m.add(l);}
+  parent.add(m);return m;}
+const box=(w,h,d,p,o)=>M(new THREE.BoxGeometry(w,h,d),p,o);
+function cyl(r,len,axis,p,o){const g=new THREE.CylinderGeometry(r,r,len,24);
+  if(axis==='x')g.rotateZ(Math.PI/2);if(axis==='z')g.rotateX(Math.PI/2);return M(g,p,o);}
+// ground
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:0xf4f1ea,roughness:1}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;ground.position.set(10,-0.01,10);S.add(ground);
+// ---------- plan lines ----------
+const plan=new THREE.Group();S.add(plan);
+function seg(pts,grp=plan,y=.02){const a=[];for(let i=0;i<pts.length;i+=2){a.push(pts[i][0],y,pts[i][1],pts[i+1][0],y,pts[i+1][1]);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(a,3));const l=new THREE.LineSegments(g,lineMat());grp.add(l);return l;}
+function rect(x0,z0,x1,z1,grp=plan){seg([[x0,z0],[x1,z0],[x1,z0],[x1,z1],[x1,z1],[x0,z1],[x0,z1],[x0,z0]],grp);}
+const T=.667;
+rect(0,0,20,25);rect(T,T,20-T,25-T);
+rect(0,15-T/2,20,15+T/2);rect(4.33-T/2,15,4.33+T/2,25);
+rect(12,25,18.33,31); // porch
+function label(txt,sub,x,z,w,grp=plan,rot=0,size=1){
+  const c=document.createElement('canvas');c.width=1024;c.height=sub?256:128;const g=c.getContext('2d');
+  g.fillStyle='#1d1d1d';g.textAlign='center';g.textBaseline='middle';
+  g.font='600 72px ui-monospace,Menlo,Consolas,monospace';g.fillText(txt,512,sub?80:64);
+  if(sub){g.font='56px ui-monospace,Menlo,Consolas,monospace';g.fillText(sub,512,180);}
+  const tx=new THREE.CanvasTexture(c);tx.anisotropy=8;
+  const h=w*c.height/c.width*size;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w*size,h),new THREE.MeshBasicMaterial({map:tx,transparent:true,depthWrite:false}));
+  m.rotation.set(-Math.PI/2,0,rot);m.position.set(x,.05,z);m.renderOrder=2;grp.add(m);return m;}
+label("PIPING ROOM","20'-0\" x 15'-0\"",10,7.5,12);
+label("CONTROLS ROOM","15'-0\" x 10'-0\"",12.2,20,9.5);
+label("CHLOR.","4'-4\" x 8'-0\"",2.4,20.5,3.4,plan,Math.PI/2,1.8);
+label("PORCH","6'-4\" x 6'-0\"",15.2,29.3,6);
+// doors (plan swings)
+function doorPlan(x,z,dir){seg([[x,z],[x,z+3*dir]]);const a=[];for(let i=0;i<=12;i++){const t=i/12*Math.PI/2;a.push([x+3*Math.sin(t),z+3*dir*Math.cos(t)]);}
+  const p=[];for(let i=0;i<12;i++)p.push(a[i],a[i+1]);seg(p);}
+doorPlan(13.5,25,1);doorPlan(10,15,-1);doorPlan(.9,25,1);
+// dimension lines
+const dims=new THREE.Group();S.add(dims);
+function dim(x0,z0,x1,z1,txt,off){const nx=x0===x1?off:0,nz=z0===z1?off:0;
+  seg([[x0+nx,z0+nz],[x1+nx,z1+nz],[x0,z0],[x0+nx*1.15,z0+nz*1.15],[x1,z1],[x1+nx*1.15,z1+nz*1.15]],dims);
+  const t=.4;seg([[x0+nx-t,z0+nz-t],[x0+nx+t,z0+nz+t],[x1+nx-t,z1+nz-t],[x1+nx+t,z1+nz+t]],dims);
+  label(txt,null,(x0+x1)/2+nx*1.45,(z0+z1)/2+nz*1.45,8,dims,x0===x1?Math.PI/2:0);}
+dim(0,0,20,0,"20'-0\"",-3);dim(0,0,0,25,"25'-0\"",-3);dim(20,0,20,15,"15'-0\"",3);dim(20,15,20,25,"10'-0\"",3);
+// north arrow
+seg([[24,-1],[24,-5],[24,-5],[23.2,-3.6],[24,-5],[24.8,-3.6]],dims);label("N",null,24,-6.2,2.4,dims);
+// ---------- walls ----------
+const walls=new THREE.Group();S.add(walls);const H=10;
+function wall(x0,z0,x1,z1,opens=[]){ // axis-aligned; opens: [start,end] along length
+  const horiz=z0===z1,L=horiz?x1-x0:z1-z0;let s=0;const cuts=[...opens,[L,L]];
+  for(const [a,b] of cuts){if(a>s){const len=a-s,c=s+len/2;
+      horiz?box(len,H,T,walls,{x:x0+c,y:H/2,z:z0}):box(T,H,len,walls,{x:x0,y:H/2,z:z0+c});}
+    if(b>a){const len=b-a,c=a+len/2,lh=H-6.67;
+      horiz?box(len,lh,T,walls,{x:x0+c,y:6.67+lh/2,z:z0}):box(T,lh,len,walls,{x:x0,y:6.67+lh/2,z:z0+c});}
+    s=b;}}
+wall(0,T/2,20,T/2);wall(T/2,T,T/2,25-T);wall(20-T/2,T,20-T/2,25-T);
+wall(0,25-T/2,20,25-T/2,[[.9,3.9],[13.5,16.5]]);
+wall(T,15,20-T,15,[[10-T,13-T]]);wall(4.33,15+T/2,4.33,25-T,[]);
+// porch slab
+const porch=box(6.33,.33,6,walls,{x:15.17,y:.165,z:28});
+// ---------- equipment ----------
+const equip=new THREE.Group();S.add(equip);const eparts=[];
+const steel=()=>new THREE.MeshStandardMaterial({color:0xeeece6,roughness:.7,transparent:true});
+for(const px of [5,10,15]){const g=new THREE.Group();g.position.x=px;equip.add(g);
+  box(2.2,.5,6,g,{y:.25,z:7.5});                         // skid
+  cyl(.85,3.2,'z',g,{y:1.5,z:8.4,mat:steel()});           // motor
+  cyl(.6,.4,'z',g,{y:1.5,z:6.6,mat:steel()});             // coupling
+  cyl(1.0,.9,'z',g,{y:1.5,z:5.8,mat:steel()});            // volute
+  cyl(.25,1.4,'z',g,{y:1.5,z:10.5,mat:steel()});         // suction to header
+  // discharge stack rises from volute top
+  let y=2.5;const st=(h,r,mk)=>{const o=mk(h,r);y+=h;return o;};
+  cyl(.13,1,'y',g,{y:y+.5,z:5.8});y+=1;
+  box(.6,.8,.6,g,{y:y+.4,z:5.8});y+=.8;                  // 3" gate
+  M(new THREE.CylinderGeometry(.18,.13,.6,20),g,{y:y+.3,z:5.8});y+=.6; // reducer
+  box(.7,.9,.7,g,{y:y+.45,z:5.8});y+=.9;                 // 4" check
+  box(.7,.9,.7,g,{y:y+.45,z:5.8});y+=.9;                 // 4" gate
+  cyl(.18,.3,'y',g,{y:y+.15,z:5.8});y+=.3;
+  cyl(.2,.8,'x',g,{y:y+.2,z:5.8});                       // tee
+  eparts.push(g);}
+label("PACO 12709 · 15 HP",null,10,10,7,equip).position.y=.06;
+const sucH=cyl(.25,17,'x',equip,{x:10,y:1.5,z:11.3});      // 6" suction header
+const disH=cyl(.18,18,'x',equip,{x:10,y:8.5,z:5.8});       // 4" discharge header topside
+// ---------- yard ----------
+const yard=new THREE.Group();S.add(yard);
+const gst=cyl(7.75,35,'y',yard,{x:42,y:17.5,z:-14});
+M(new THREE.ConeGeometry(8,2,32),yard,{x:42,y:36,z:-14});
+const pt=new THREE.Group();pt.position.set(33,0,14);yard.add(pt);
+cyl(3,28,'z',pt,{y:4});for(const z of[-10,10])box(4,1.2,1,pt,{y:.6,z});
+const gen=new THREE.Group();gen.position.set(-14,0,6);yard.add(gen);
+box(5,.5,10,gen,{y:.25});box(3.42,4.5,9.33,gen,{y:2.75});
+const well=new THREE.Group();well.position.set(-14,0,22);yard.add(well);
+box(5,.5,10,well,{y:.25});cyl(.5,3,'y',well,{y:2,z:-2});box(1.6,1.2,1.6,well,{y:4,z:-2});
+const yl=[label("50,000 GAL GST",null,42,-14+11,16,yard),label("6,000 GAL PRESS. TANK",null,40.5,14,18,yard,Math.PI/2),
+ label("GENERATOR",null,-20,6,12,yard,Math.PI/2),label("WELL",null,-20,22,8,yard,Math.PI/2)];
+// yard pipes (draw-in)
+const pipes=[];function ypipe(pts){const c=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)),false,'catmullrom',0);
+  const tubeG=new THREE.TubeGeometry(c,200,.3,10);
+  const m=new THREE.Mesh(tubeG,new THREE.MeshStandardMaterial({color:0x2a2a2a,roughness:.6}));m.castShadow=true;yard.add(m);pipes.push(m);}
+ypipe([[-14,.5,18],[-14,.5,15.5],[-4,.5,15.5],[0,.5,15.5]].map(p=>p));  // well -> building (toward tank via bldg)
+ypipe([[-14,.5,18],[-8,.5,18],[-8,.5,-4],[34.5,.5,-4],[34.5,.5,-10]]);   // well -> GST
+ypipe([[34.2,.5,-8],[24,.5,-8],[24,.5,8],[20,.5,8]]);  // GST -> suction
+ypipe([[20,.5,4],[33,.5,4],[33,.5,1]]);                          // discharge -> pressure tank
+// ---------- roof ----------
+const roof=new THREE.Group();S.add(roof);
+const roofM=new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:.35,depthWrite:false});
+const rm=M(new THREE.BoxGeometry(24,.5,29),roof,{x:10,z:12.5,mat:roofM,shadow:false});
+// ---------- animation ----------
+const cl=v=>Math.min(1,Math.max(0,v)),ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2,lerp=(a,b,t)=>a+(b-a)*t;
+function fade(o,a){o.traverse(n=>{if(n.material){n.material.transparent=true;
+  n.material.opacity=n.material===roofM?.35*a:a;n.material.depthWrite = n.material===roofM?false:a>.99;}});o.visible=a>0.005;}
+const cap=document.getElementById('cap'),fin=document.getElementById('final'),prog=document.getElementById('prog');
+let lastStage=-1;
+function frame(){
+  const max=document.documentElement.scrollHeight-innerHeight;const p=max>0?scrollY/max*5:0; // 0..5
+  const st=Math.min(4,Math.floor(p));
+  if(st!==lastStage){lastStage=st;const s=STAGES[st];cap.innerHTML=`<b>${s[0]}</b>${s[1]}<div class="src">${s[2]}</div>`;prog.textContent=`STAGE ${st+1}/5`;}
+  const tilt=ease(cl(p-.8)), yz=ease(cl(p-2.8));
+  // camera: top-down -> isometric; widen for yard
+  const el=lerp(89.9,35.26,tilt)*Math.PI/180, az=lerp(0,45,tilt)*Math.PI/180;
+  const tgt=new THREE.Vector3(lerp(8,lerp(10,14,yz),tilt),lerp(0,lerp(3,16,yz),tilt),lerp(14,lerp(13,4,yz),tilt));
+  const d=200;cam.position.set(tgt.x-d*Math.cos(el)*Math.sin(az),d*Math.sin(el),tgt.z+d*Math.cos(el)*Math.cos(az));
+  cam.up.set(0,1,0);if(tilt<.001)cam.up.set(0,0,-1);cam.lookAt(tgt);
+  const span=lerp(lerp(23,22,tilt),50,yz),asp=innerWidth/innerHeight;
+  const sv=asp<1?span/Math.max(asp,.5)*.85:span,sh=asp<1?sv*asp:span*asp;cam.left=-sh;cam.right=sh;cam.top=sv;cam.bottom=-sv;cam.updateProjectionMatrix();
+  // walls extrude
+  const w=ease(cl((p-1.1)/.8));walls.scale.y=Math.max(.001,w);walls.visible=w>.002;
+  fade(dims,1-ease(cl((p-1)/.6)));
+  // equipment rises
+  eparts.forEach((g,i)=>{const t=ease(cl((p-2.05-i*.15)/.5));g.position.y=lerp(-12,0,t);});
+  const h=ease(cl((p-2.5)/.4));sucH.scale.x=disH.scale.x=Math.max(.001,h);sucH.visible=disH.visible=h>.002;
+  equip.children.find(c=>c.geometry?.type==='PlaneGeometry').material.opacity=h;
+  // yard
+  const yr=(i)=>ease(cl((p-3.05-i*.12)/.5));
+  gst.position.y=lerp(-40,17.5,yr(0));yard.children[1].position.y=lerp(-40,36,yr(0));
+  pt.position.y=lerp(-10,0,yr(1));gen.position.y=lerp(-8,0,yr(2));well.position.y=lerp(-8,0,yr(3));
+  yl.forEach(l=>l.material.opacity=yr(3));
+  pipes.forEach((m,i)=>{const t=cl((p-3.5-i*.08)/.35);const n=m.geometry.index.count;m.geometry.setDrawRange(0,Math.floor(n*t));m.visible=t>0;});
+  // roof drop
+  const r=ease(cl((p-4.05)/.6));roof.position.y=lerp(45,10,r);fade(roof,r);
+  fin.style.opacity=cl((p-4.6)/.3);
+  R.setSize(innerWidth,innerHeight,false);R.render(S,cam);requestAnimationFrame(frame);}
+frame();
+window.__ready=true;
+</script><script>if('serviceWorker' in navigator)navigator.serviceWorker.register("../sw.js",{scope:"../"});</script></body></html>
