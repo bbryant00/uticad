@@ -201,21 +201,21 @@
  "piping": {
   "suction_header": {
    "d": 8,
-   "z": -5.6,
-   "y": 1.25,
-   "x0": -1,
+   "z": -6.0,
+   "y": 2.47,
+   "x0": -2.7,
    "x1": 9.5,
    "src": "6 (109 8\" spool FxF)",
-   "assumed": "centerline elevation"
+   "assumed": "centerline elevation/position set so 8x4 eccentric reducer (flat top) meets 4\" pump suction; v2"
   },
   "discharge_header": {
    "d": 8,
-   "z": -3.0,
-   "y": 6.0,
-   "x0": -3,
-   "x1": 9.5,
+   "z": -2.3,
+   "y": 6.4,
+   "x0": -2.3,
+   "x1": 9.6,
    "src": "6",
-   "assumed": "elevation (owner convention: pressure header above suction)"
+   "assumed": "directly over pump top discharges (check+gate stack); owner: pressure above suction; v2"
   },
   "pump_suction": "8\" tee (101) -> 8\" gate (102) -> 8\"x4\" eccentric reducer (104) -> pump",
   "pump_discharge": "4\"x2\" / 8\"x6\" reducer (112) -> 8\" silent check (103) -> 8\" gate (102) -> header tee (101)",
@@ -261,7 +261,12 @@
    "desc": "Prop. 8\" W.M. GST/PT/distribution, 95 LF + spools",
    "src": "3"
   },
-  "material": "125 lb flanged DI inside; owner convention reddish-brown primer"
+  "material": "125 lb flanged DI inside; owner convention reddish-brown primer",
+  "yard_burial": {
+   "cover_ft": 3,
+   "material": "white PVC",
+   "note": "owner: outside horizontal pipe always buried white PVC; DI risers only above grade"
+  }
  },
  "gst": [
   {
@@ -333,7 +338,8 @@
   "prv": "2\" pressure relief set 10 psi above system",
   "level": "72\" probe; 48\" E9/E7 all pumps off, 28\" E8 HSP1 on (lead), 22\" E6 HSP2 on (lag), 16\" E3 alarm off, 12\" E2 alarm on",
   "lines": "3/4\" G.I.P. to level control & air compressor (sheet says 3/4\"; owner convention 1\")",
-  "src": "4"
+  "src": "4",
+  "mount": "horizontal on steel saddles at grade, centerline ~5.5 ft above grade (ASSUMED)"
  },
  "air_compressor": {
   "desc": "3 HP, 125 psi",
